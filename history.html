@@ -1,0 +1,731 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>지수 역사</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpolyline points='3,26 11,18 17,21 29,6' fill='none' stroke='%232a78d6' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<style>
+  /* ---------- 색 (밝은 화면 / 어두운 화면) — 내 자산 페이지와 같음 ---------- */
+  :root {
+    color-scheme: light;
+    --page: #f9f9f7;
+    --surface: #fcfcfb;
+    --text-1: #0b0b0b;
+    --text-2: #52514e;
+    --muted: #898781;
+    --hairline: #e1e0d9;
+    --axis: #c3c2b7;
+    --border: rgba(11, 11, 11, 0.10);
+    --control: #c3c2b7;
+    --accent: #2a78d6;
+    --accent-text: #256abf;
+    --up: #d03b3b;
+    --down: #256abf;
+    --wash: #eef4fc;
+    --s1: #2a78d6;            /* S&P 500 */
+    --s2: #eb6834;            /* 나스닥100 */
+    --fx: #52514e;            /* 환율 (참고용 선) */
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #0d0d0d;
+      --surface: #1a1a19;
+      --text-1: #f0efec;
+      --text-2: #c3c2b7;
+      --muted: #898781;
+      --hairline: #2c2c2a;
+      --axis: #383835;
+      --border: rgba(255, 255, 255, 0.10);
+      --control: #52514e;
+      --accent: #3987e5;
+      --accent-text: #6da7ec;
+      --up: #e66767;
+      --down: #6da7ec;
+      --wash: #142133;
+      --s1: #3987e5;
+      --s2: #d95926;
+      --fx: #c3c2b7;
+    }
+  }
+
+  /* ---------- 기본 ---------- */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-1);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; padding: 16px 16px 48px; }
+  h1 { font-size: 22px; font-weight: 650; margin: 0; }
+  h2 { font-size: 16px; font-weight: 600; margin: 0; }
+  p { margin: 0; }
+  [hidden] { display: none !important; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .sub { font-size: 13px; color: var(--text-2); }
+  .tiny { font-size: 11px; color: var(--text-2); }
+  [data-dir="up"] { color: var(--up); }
+  [data-dir="down"] { color: var(--down); }
+
+  /* 페이지 이동 */
+  .nav { display: flex; gap: 4px; margin-bottom: 16px; font-size: 14px; }
+  .nav a { padding: 6px 12px; border-radius: 999px; border: 1px solid transparent; color: var(--text-2); text-decoration: none; }
+  .nav a:hover { color: var(--text-1); }
+  .nav a[aria-current="page"] { color: var(--text-1); background: var(--surface); border-color: var(--border); font-weight: 600; }
+
+  .top { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; }
+  .lede { font-size: 14px; color: var(--text-2); margin: 6px 0 16px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 16px 12px;
+    margin-bottom: 16px;
+  }
+  .card-head { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; }
+
+  /* ---------- 기간 선택 ---------- */
+  .controls { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 6px; }
+  .periods { display: flex; flex-wrap: wrap; gap: 4px; }
+  button {
+    font: inherit;
+    font-size: 14px;
+    min-height: 36px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    border: 1px solid var(--control);
+    background: var(--surface);
+    color: var(--text-1);
+    cursor: pointer;
+  }
+  .periods button[aria-pressed="true"] { background: var(--text-1); color: var(--surface); border-color: transparent; font-weight: 600; }
+  .periods button:disabled { opacity: 0.4; cursor: default; }
+  .check { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; color: var(--text-2); cursor: pointer; }
+  .check input { width: 16px; height: 16px; margin: 0; accent-color: var(--accent); }
+  .range { font-size: 13px; color: var(--text-2); margin-bottom: 14px; }
+
+  /* ---------- 요약 숫자 ---------- */
+  .stats4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+  @media (max-width: 640px) { .stats4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px 14px; }
+  .tile .label { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text-2); }
+  .tile .value { font-size: 22px; font-weight: 650; margin-top: 2px; overflow-wrap: anywhere; }
+  .tile .sub { font-size: 12px; }
+
+  /* ---------- 범례 ---------- */
+  .legend { list-style: none; display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; padding: 0; font-size: 13px; color: var(--text-2); }
+  .legend li { display: inline-flex; align-items: center; gap: 6px; }
+  .lkey { display: inline-block; flex: none; width: 16px; height: 3px; border-radius: 2px; }
+
+  /* ---------- 그래프 ---------- */
+  .chart { position: relative; touch-action: pan-y; border-radius: 6px; }
+  .chart:focus-visible { outline-offset: 4px; }
+  .chart svg { display: block; overflow: visible; }
+  .chart .grid { stroke: var(--hairline); stroke-width: 1; }
+  .chart .axis { stroke: var(--axis); stroke-width: 1; }
+  .chart .tick { fill: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .chart .line { fill: none; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .chart .endlabel { fill: var(--text-2); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .chart .cross { stroke: var(--text-2); stroke-width: 1; }
+  .chart .dot { stroke: var(--surface); stroke-width: 2; }
+  .chart-note { font-size: 12px; color: var(--text-2); margin-top: 6px; }
+
+  /* 말풍선 */
+  .tip {
+    position: fixed;
+    z-index: 10;
+    pointer-events: none;
+    min-width: 150px;
+    background: var(--surface);
+    color: var(--text-1);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+    padding: 8px 10px;
+    font-size: 13px;
+    line-height: 1.5;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  .tip-date { font-size: 12px; color: var(--text-2); margin-bottom: 2px; }
+  .tip-row { display: flex; align-items: center; gap: 6px; }
+  .tip-row strong { font-weight: 650; }
+  .tip-row .chg, .tip-row .name { font-size: 12px; color: var(--text-2); }
+
+  /* ---------- 표 ---------- */
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 8px 6px; text-align: right; border-bottom: 1px solid var(--hairline); white-space: nowrap; }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { font-size: 12px; font-weight: 600; color: var(--text-2); }
+  thead tr:first-child th { border-bottom: 0; padding-bottom: 0; }
+  tbody tr.is-selected td { background: var(--wash); }
+  td .tiny { display: block; }
+  @media (max-width: 480px) { th, td { padding: 8px 4px; font-size: 12px; } }
+  .group-head { display: inline-flex; align-items: center; gap: 6px; }
+
+  .notes { font-size: 12px; color: var(--text-2); margin: 8px 0 0; padding-left: 18px; }
+  .notes li { margin-bottom: 4px; }
+  .error-box { padding: 16px; color: var(--text-2); }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <nav class="nav" aria-label="페이지">
+    <a href="./">내 자산</a>
+    <a href="history.html" aria-current="page">지수 역사</a>
+  </nav>
+
+  <header class="top">
+    <h1>지수 역사</h1>
+    <p class="sub" id="dataNote"></p>
+  </header>
+  <p class="lede">S&amp;P 500과 나스닥100(QQQ가 따라가는 지수)에 처음 $100, 또는 100만 원을 넣었다면 얼마가 됐을지 달러 기준과 원화 기준으로 따로 보여줘요.</p>
+
+  <div id="loading" class="error-box">데이터를 불러오는 중…</div>
+
+  <div id="content" hidden>
+    <div class="controls">
+      <div class="periods" id="periods" role="group" aria-label="기간"></div>
+      <label class="check"><input type="checkbox" id="logScale"> 로그 눈금</label>
+    </div>
+    <p class="range" id="rangeText"></p>
+
+    <section class="stats4" id="stats" aria-label="선택한 기간의 수익률"></section>
+
+    <section class="card" aria-labelledby="usdTitle">
+      <div class="card-head">
+        <div><h2 id="usdTitle">달러 기준</h2><p class="sub">처음에 $100를 넣었다면</p></div>
+        <ul class="legend" data-legend></ul>
+      </div>
+      <div class="chart" id="chartUsd" tabindex="0"></div>
+    </section>
+
+    <section class="card" aria-labelledby="krwTitle">
+      <div class="card-head">
+        <div><h2 id="krwTitle">원화 기준</h2><p class="sub">처음에 100만 원을 달러로 바꿔 넣고, 지금 원화로 다시 바꿨다면</p></div>
+        <ul class="legend" data-legend></ul>
+      </div>
+      <div class="chart" id="chartKrw" tabindex="0"></div>
+      <p class="chart-note">두 그래프는 세로 눈금이 같아요. 원화 선이 달러 선보다 위에 있으면 그 기간에 원화 가치가 떨어져(환율 상승) 원화 투자자가 더 벌었다는 뜻이에요.</p>
+    </section>
+
+    <section class="card" aria-labelledby="fxTitle">
+      <div class="card-head">
+        <div><h2 id="fxTitle">달러-원 환율</h2><p class="sub">1달러당 원 · 원화 기준 수익률이 달라지는 이유</p></div>
+      </div>
+      <div class="chart" id="chartFx" tabindex="0"></div>
+    </section>
+
+    <section class="card" aria-labelledby="tableTitle">
+      <div class="card-head">
+        <div><h2 id="tableTitle">기간별 수익률</h2><p class="sub">큰 숫자는 연평균, 작은 숫자는 누적 · 이번 달까지</p></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th rowspan="2">기간</th>
+              <th colspan="2"><span class="group-head"><span class="lkey" style="background:var(--s1)"></span>S&amp;P 500</span></th>
+              <th colspan="2"><span class="group-head"><span class="lkey" style="background:var(--s2)"></span>나스닥100</span></th>
+            </tr>
+            <tr><th>달러</th><th>원화</th><th>달러</th><th>원화</th></tr>
+          </thead>
+          <tbody id="tableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <ul class="notes">
+      <li>지수는 배당을 뺀 가격 지수예요. 실제 ETF(VOO, QQQ 등)는 배당을 다시 투자한 만큼 더 높고, 운용보수만큼 조금 낮아요.</li>
+      <li>매달 마지막 거래일 종가 기준이에요. 마지막 달은 아직 진행 중이라 가장 최근 가격이에요.</li>
+      <li>원화 기준은 지수에 그 달 말 달러-원 환율을 곱해 계산해요. 환율은 미국 연준(FRED)의 뉴욕 정오 환율이고, 아직 발표되지 않은 최근 달은 ECB 기준환율을 써요.</li>
+      <li>세금, 수수료, 환전 비용은 빠져 있어요. 과거 수익률이 앞으로의 수익률을 보장하지 않아요.</li>
+      <li>데이터: Yahoo Finance(^GSPC, ^NDX), FRED(DEXKOUS), frankfurter.dev. 평일 아침마다 자동으로 갱신돼요.</li>
+    </ul>
+  </div>
+</main>
+
+<div class="tip" id="tip" role="tooltip" hidden></div>
+
+<script>
+'use strict';
+
+/* ================= 1. 도우미 ================= */
+
+const $ = (id) => document.getElementById(id);
+const SVGNS = 'http://www.w3.org/2000/svg';
+
+function el(tag, props = {}, children = []) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k === 'class') node.className = v;
+    else if (k === 'text') node.textContent = v;
+    else if (k === 'style') node.style.cssText = v;
+    else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of [].concat(children)) if (c != null) node.append(c);
+  return node;
+}
+
+// SVG 요소 만들기
+function svgEl(tag, attrs, parent) {
+  const node = document.createElementNS(SVGNS, tag);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+  if (parent) parent.append(node);
+  return node;
+}
+
+const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+
+
+/* ================= 2. 숫자·날짜 표시 ================= */
+
+const pctSigned1 = new Intl.NumberFormat('en-US', { style: 'percent', minimumFractionDigits: 1, maximumFractionDigits: 1, signDisplay: 'exceptZero' });
+const pctSigned0 = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 0, signDisplay: 'exceptZero' });
+const usd0 = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+const num0 = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 0 });
+const num2 = new Intl.NumberFormat('ko-KR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// 누적 수익률: 배수 → '+145.3%' (1000% 넘으면 소수점 없이)
+function fmtCum(mult) {
+  const p = mult - 1;
+  return Math.abs(p) >= 10 ? pctSigned0.format(p) : pctSigned1.format(p);
+}
+// 만 원 단위 값 → '1,234만 원' / '2.35억 원'
+function fmtMan(v) {
+  if (v >= 10000) return `${(v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 2 })}억 원`;
+  return `${num0.format(v)}만 원`;
+}
+function tickUsd(v) {
+  return v >= 1000 ? `$${(v / 1000).toLocaleString('en-US', { maximumFractionDigits: 1 })}K` : `$${num0.format(v)}`;
+}
+function tickMan(v) {
+  return v >= 10000 ? `${(v / 10000).toLocaleString('ko-KR', { maximumFractionDigits: 1 })}억` : `${num0.format(v)}만`;
+}
+// '2020-03' → '2020년 3월'
+function monthKo(key) {
+  const [y, m] = key.split('-');
+  return `${y}년 ${Number(m)}월`;
+}
+// 한국 시간 '11/3 06:30'
+const kstParts = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+function fmtTime(iso) {
+  const p = Object.fromEntries(kstParts.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
+}
+function direction(x) { return x > 0.00005 ? 'up' : x < -0.00005 ? 'down' : 'flat'; }
+function arrow(dir) { return dir === 'up' ? '▲ ' : dir === 'down' ? '▼ ' : ''; }
+
+
+/* ================= 3. 데이터 ================= */
+
+const PERIODS = [
+  { key: '1', label: '1년' }, { key: '3', label: '3년' }, { key: '5', label: '5년' },
+  { key: '10', label: '10년' }, { key: '20', label: '20년' }, { key: '30', label: '30년' },
+  { key: 'all', label: '전체' },
+];
+
+let D = null;   // history.json을 계산하기 좋게 바꾼 것
+const state = { period: '10', log: false, hover: null };
+
+function derive(h) {
+  return {
+    n: h.months.length,
+    months: h.months,
+    updated: h.updated,
+    spxUsd: h.spx,
+    ndxUsd: h.ndx,
+    fx: h.usdkrw,
+    // 원화 기준 = 지수 × 그 달 환율
+    spxKrw: h.spx.map((v, i) => v * h.usdkrw[i]),
+    ndxKrw: h.ndx.map((v, i) => v * h.usdkrw[i]),
+  };
+}
+
+function isValidHistory(h) {
+  const okArr = (a) => Array.isArray(a) && a.length === h.months.length && a.every((v) => Number.isFinite(v) && v > 0);
+  return h && Array.isArray(h.months) && h.months.length >= 24 && okArr(h.spx) && okArr(h.ndx) && okArr(h.usdkrw);
+}
+
+// 기간의 시작 위치. 데이터가 모자라면 null
+function startIndex(key) {
+  if (key === 'all') return 0;
+  const s = D.n - 1 - 12 * Number(key);
+  return s >= 0 ? s : null;
+}
+
+// 연평균 수익률 (CAGR) = 배수^(1/년수) − 1
+function cagr(mult, months) { return Math.pow(mult, 12 / months) - 1; }
+
+
+/* ================= 4. 그래프 ================= */
+
+// 보기 좋은 눈금 (1, 2, 2.5, 5 × 10^k 간격)
+function niceTicks(min, max, count) {
+  if (min === max) { min -= 1; max += 1; }
+  const raw = (max - min) / count;
+  const p = Math.pow(10, Math.floor(Math.log10(raw)));
+  const f = raw / p;
+  const step = (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * p;
+  const lo = Math.floor(min / step) * step;
+  const hi = Math.ceil(max / step) * step;
+  const ticks = [];
+  for (let i = 0; lo + i * step <= hi + step / 2; i++) ticks.push(Number((lo + i * step).toPrecision(12)));
+  return { lo, hi, ticks };
+}
+
+// 로그 눈금: 1·2·5 × 10^k, 너무 많으면 10의 거듭제곱만
+function logScale(min, max) {
+  const lo = min / 1.06, hi = max * 1.06;
+  let ticks = [];
+  for (let k = Math.floor(Math.log10(lo)); k <= Math.ceil(Math.log10(hi)); k++) {
+    for (const m of [1, 2, 5]) {
+      const v = Number((m * Math.pow(10, k)).toPrecision(12));
+      if (v >= lo && v <= hi) ticks.push(v);
+    }
+  }
+  if (ticks.length > 7) ticks = ticks.filter((v) => Math.log10(v) % 1 === 0);
+  if (ticks.length < 2) ticks = niceTicks(lo, hi, 4).ticks.filter((v) => v >= lo && v <= hi);
+  return { lo, hi, ticks };
+}
+
+function linearScale(min, max) { return niceTicks(min, max, 4); }
+
+// 가로축 눈금: 화면 폭에 맞게 몇 년(또는 몇 달) 간격으로
+function xTicks(months, width) {
+  const maxTicks = width < 480 ? 4 : 7;
+  const idx = months.map((_, i) => i);
+  if (months.length <= 37) {
+    for (const step of [3, 6]) {
+      const pick = idx.filter((i) => (Number(months[i].slice(5)) - 1) % step === 0);
+      if (pick.length <= maxTicks) return pick.map((i) => [i, `${months[i].slice(2, 4)}.${Number(months[i].slice(5))}`]);
+    }
+  }
+  for (const step of [1, 2, 5, 10, 20]) {
+    const pick = idx.filter((i) => months[i].endsWith('-01') && Number(months[i].slice(0, 4)) % step === 0);
+    if (pick.length <= maxTicks) return pick.map((i) => [i, months[i].slice(0, 4)]);
+  }
+  return [];
+}
+
+const charts = [];   // 지금 화면에 있는 그래프들 (마우스를 올리면 모두 같은 달을 가리킴)
+
+/*
+  opts = {
+    container, months, height,
+    series: [{ name, color, values }],
+    scale: { lo, hi, ticks }, log,
+    yTick(v), baseline,            // 기준선 (100)
+    endLabel(v) | null,            // 선 끝에 붙일 값
+    tipRows(i) → [{ color, value, chg, name }],
+    ariaLabel,
+  }
+*/
+function drawChart(opts) {
+  const box = opts.container;
+  box.replaceChildren();
+  const W = Math.max(260, box.clientWidth);
+  const Hh = opts.height;
+  const showEnd = !!opts.endLabel && W >= 480;
+  const m = { top: 10, right: showEnd ? 72 : 14, bottom: 24, left: 48 };
+  const pw = W - m.left - m.right;
+  const ph = Hh - m.top - m.bottom;
+  const n = opts.months.length;
+  const { lo, hi, ticks } = opts.scale;
+
+  const x = (i) => m.left + (n === 1 ? 0 : (i / (n - 1)) * pw);
+  const y = opts.log
+    ? (v) => m.top + ph - ((Math.log10(v) - Math.log10(lo)) / (Math.log10(hi) - Math.log10(lo))) * ph
+    : (v) => m.top + ph - ((v - lo) / (hi - lo)) * ph;
+
+  const svg = svgEl('svg', { width: W, height: Hh, viewBox: `0 0 ${W} ${Hh}`, role: 'img', 'aria-label': opts.ariaLabel });
+
+  // 가로 눈금선과 세로축 숫자
+  for (const t of ticks) {
+    const yy = y(t);
+    svgEl('line', { x1: m.left, x2: W - m.right, y1: yy, y2: yy, class: t === opts.baseline ? 'axis' : 'grid' }, svg);
+    svgEl('text', { x: m.left - 6, y: yy, class: 'tick', 'text-anchor': 'end', 'dominant-baseline': 'middle' }, svg).textContent = opts.yTick(t);
+  }
+  // 기준선(처음 넣은 돈)이 눈금에 없으면 따로 그림
+  if (opts.baseline != null && !ticks.includes(opts.baseline) && opts.baseline > lo && opts.baseline < hi) {
+    const yy = y(opts.baseline);
+    svgEl('line', { x1: m.left, x2: W - m.right, y1: yy, y2: yy, class: 'axis' }, svg);
+  }
+  // 아래 축과 연도
+  svgEl('line', { x1: m.left, x2: W - m.right, y1: m.top + ph, y2: m.top + ph, class: 'axis' }, svg);
+  for (const [i, label] of xTicks(opts.months, W)) {
+    const xx = x(i);
+    const anchor = xx < m.left + 14 ? 'start' : xx > W - m.right - 14 ? 'end' : 'middle';
+    svgEl('text', { x: xx, y: Hh - 6, class: 'tick', 'text-anchor': anchor }, svg).textContent = label;
+  }
+
+  // 선
+  for (const s of opts.series) {
+    const d = s.values.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+    svgEl('path', { d, class: 'line', style: `stroke:${s.color}` }, svg);
+  }
+
+  // 선 끝 값 (두 값이 너무 가까우면 겹치니 생략 → 범례와 말풍선이 대신함)
+  if (showEnd) {
+    const ends = opts.series.map((s) => ({ y: y(s.values[n - 1]), text: opts.endLabel(s.values[n - 1]) }));
+    const apart = ends.every((a, i) => ends.every((b, j) => i === j || Math.abs(a.y - b.y) >= 14));
+    if (apart) for (const e of ends) svgEl('text', { x: x(n - 1) + 8, y: e.y, class: 'endlabel', 'dominant-baseline': 'middle' }, svg).textContent = e.text;
+  }
+
+  const hoverLayer = svgEl('g', {}, svg);
+  box.append(svg);
+
+  const chart = {
+    opts,
+    showHover(i) {
+      hoverLayer.replaceChildren();
+      if (i == null) return;
+      const xx = x(i);
+      svgEl('line', { x1: xx, x2: xx, y1: m.top, y2: m.top + ph, class: 'cross' }, hoverLayer);
+      for (const s of opts.series) svgEl('circle', { cx: xx, cy: y(s.values[i]), r: 4, class: 'dot', style: `fill:${s.color}` }, hoverLayer);
+    },
+    indexAt(clientX) {
+      const r = svg.getBoundingClientRect();
+      return clamp(Math.round(((clientX - r.left - m.left) / pw) * (n - 1)), 0, n - 1);
+    },
+    anchorOf(i) {
+      const r = svg.getBoundingClientRect();
+      return { x: r.left + x(i), y: r.top + m.top + 8 };
+    },
+  };
+
+  // 마우스·터치: 가장 가까운 달로 맞춤
+  svg.addEventListener('pointermove', (e) => setHover(chart, chart.indexAt(e.clientX), e.clientX, e.clientY));
+  svg.addEventListener('pointerdown', (e) => setHover(chart, chart.indexAt(e.clientX), e.clientX, e.clientY));
+  svg.addEventListener('pointerleave', clearHover);
+  // 키보드: ← → 로 한 달씩, Home/End
+  box.onfocus = () => { const i = state.hover ?? n - 1; const a = chart.anchorOf(i); setHover(chart, i, a.x, a.y); };
+  box.onblur = clearHover;
+  box.onkeydown = (e) => {
+    const step = { ArrowLeft: -1, ArrowRight: 1 }[e.key];
+    let i = state.hover ?? n - 1;
+    if (step) i = clamp(i + step, 0, n - 1);
+    else if (e.key === 'Home') i = 0;
+    else if (e.key === 'End') i = n - 1;
+    else return;
+    e.preventDefault();
+    const a = chart.anchorOf(i);
+    setHover(chart, i, a.x, a.y);
+  };
+
+  charts.push(chart);
+  return chart;
+}
+
+const tip = $('tip');
+
+function setHover(active, i, cx, cy) {
+  state.hover = i;
+  for (const c of charts) c.showHover(i);
+  // 말풍선: 그 달의 모든 선 값을 한 번에
+  const rows = active.opts.tipRows(i).map((r) => el('div', { class: 'tip-row' }, [
+    r.color ? el('span', { class: 'lkey', style: `background:${r.color}` }) : null,
+    el('strong', { text: r.value }),
+    r.chg ? el('span', { class: 'chg', text: r.chg }) : null,
+    el('span', { class: 'name', text: r.name }),
+  ]));
+  tip.replaceChildren(el('div', { class: 'tip-date', text: monthKo(active.opts.months[i]) }), ...rows);
+  tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  let left = cx + 14;
+  if (left + r.width > window.innerWidth - 8) left = cx - r.width - 14;
+  left = clamp(left, 8, window.innerWidth - r.width - 8);
+  let top = cy - r.height - 12;
+  if (top < 8) top = cy + 16;
+  tip.style.left = left + 'px';
+  tip.style.top = top + 'px';
+}
+
+function clearHover() {
+  state.hover = null;
+  for (const c of charts) c.showHover(null);
+  tip.hidden = true;
+}
+
+window.addEventListener('scroll', () => { tip.hidden = true; }, { passive: true });
+
+
+/* ================= 5. 화면 그리기 ================= */
+
+const SER = {
+  spx: { name: 'S&P 500', color: 'var(--s1)' },
+  ndx: { name: '나스닥100', color: 'var(--s2)' },
+};
+
+function render() {
+  const s = startIndex(state.period);
+  const e = D.n - 1;
+  const months = D.months.slice(s);
+
+  // 기간 버튼
+  for (const btn of $('periods').children) btn.setAttribute('aria-pressed', String(btn.dataset.key === state.period));
+  $('logScale').checked = state.log;
+
+  const thisMonth = new Date().toISOString().slice(0, 7);
+  const years = (e - s) / 12;
+  $('rangeText').textContent = `${monthKo(D.months[s])} ~ ${monthKo(D.months[e])}` +
+    (state.period === 'all' ? ` (약 ${Math.round(years)}년)` : '') +
+    (D.months[e] === thisMonth ? ' · 이번 달은 진행 중' : '');
+
+  renderStats(s, e);
+  renderCharts(s, months);
+  renderTable();
+}
+
+function renderStats(s, e) {
+  const items = [
+    ['spx', '달러', D.spxUsd], ['spx', '원화', D.spxKrw],
+    ['ndx', '달러', D.ndxUsd], ['ndx', '원화', D.ndxKrw],
+  ];
+  $('stats').replaceChildren(...items.map(([k, basis, arr]) => {
+    const mult = arr[e] / arr[s];
+    const dir = direction(mult - 1);
+    const value = el('div', { class: 'value', text: arrow(dir) + fmtCum(mult) });
+    value.dataset.dir = dir;
+    return el('div', { class: 'tile' }, [
+      el('div', { class: 'label' }, [el('span', { class: 'lkey', style: `background:${SER[k].color}` }), `${SER[k].name} · ${basis}`]),
+      value,
+      el('div', { class: 'sub', text: `연평균 ${pctSigned1.format(cagr(mult, e - s))}` }),
+    ]);
+  }));
+}
+
+function renderCharts(s, months) {
+  charts.length = 0;
+  tip.hidden = true;
+  state.hover = null;
+
+  // 처음 넣은 돈 = 100 ($100 또는 100만 원)으로 맞춘 값
+  const rebase = (arr) => arr.slice(s).map((v) => (100 * v) / arr[s]);
+  const usd = { spx: rebase(D.spxUsd), ndx: rebase(D.ndxUsd) };
+  const krw = { spx: rebase(D.spxKrw), ndx: rebase(D.ndxKrw) };
+  const fx = D.fx.slice(s);
+
+  // 달러·원화 그래프는 같은 세로 눈금을 씀 (서로 비교할 수 있게)
+  const all = [...usd.spx, ...usd.ndx, ...krw.spx, ...krw.ndx];
+  const min = Math.min(...all), max = Math.max(...all);
+  const scale = state.log ? logScale(min, max) : linearScale(Math.min(min, 100), max);
+
+  const narrow = $('chartUsd').clientWidth < 480;
+  const chg = (v) => fmtCum(v / 100);
+
+  drawChart({
+    container: $('chartUsd'), months, height: narrow ? 210 : 260,
+    series: [{ ...SER.spx, values: usd.spx }, { ...SER.ndx, values: usd.ndx }],
+    scale, log: state.log, baseline: 100, yTick: tickUsd,
+    endLabel: (v) => usd0.format(v),
+    tipRows: (i) => [
+      { color: SER.spx.color, value: usd0.format(usd.spx[i]), chg: chg(usd.spx[i]), name: SER.spx.name },
+      { color: SER.ndx.color, value: usd0.format(usd.ndx[i]), chg: chg(usd.ndx[i]), name: SER.ndx.name },
+    ],
+    ariaLabel: `달러 기준: $100가 S&P 500은 ${usd0.format(usd.spx.at(-1))}, 나스닥100은 ${usd0.format(usd.ndx.at(-1))}가 됨`,
+  });
+
+  drawChart({
+    container: $('chartKrw'), months, height: narrow ? 210 : 260,
+    series: [{ ...SER.spx, values: krw.spx }, { ...SER.ndx, values: krw.ndx }],
+    scale, log: state.log, baseline: 100, yTick: tickMan,
+    endLabel: (v) => fmtMan(v).replace(' 원', ''),
+    tipRows: (i) => [
+      { color: SER.spx.color, value: fmtMan(krw.spx[i]), chg: chg(krw.spx[i]), name: SER.spx.name },
+      { color: SER.ndx.color, value: fmtMan(krw.ndx[i]), chg: chg(krw.ndx[i]), name: SER.ndx.name },
+      { color: null, value: `${num2.format(fx[i])}원`, chg: '', name: '환율' },
+    ],
+    ariaLabel: `원화 기준: 100만 원이 S&P 500은 ${fmtMan(krw.spx.at(-1))}, 나스닥100은 ${fmtMan(krw.ndx.at(-1))}이 됨`,
+  });
+
+  const fxScale = linearScale(Math.min(...fx), Math.max(...fx));
+  drawChart({
+    container: $('chartFx'), months, height: narrow ? 140 : 160,
+    series: [{ name: '환율', color: 'var(--fx)', values: fx }],
+    scale: fxScale, log: false, baseline: null, yTick: (v) => num0.format(v),
+    endLabel: (v) => `${num0.format(v)}원`,
+    tipRows: (i) => [{ color: 'var(--fx)', value: `${num2.format(fx[i])}원`, chg: fmtCum(fx[i] / fx[0]), name: '1달러당' }],
+    ariaLabel: `달러-원 환율: ${num0.format(fx[0])}원에서 ${num0.format(fx.at(-1))}원`,
+  });
+}
+
+function renderTable() {
+  const e = D.n - 1;
+  const arrs = [D.spxUsd, D.spxKrw, D.ndxUsd, D.ndxKrw];
+  const rows = [];
+  for (const p of PERIODS) {
+    const s = startIndex(p.key);
+    if (s == null) continue;
+    const label = p.key === 'all' ? ['전체', el('span', { class: 'tiny', text: `${D.months[0].slice(0, 4)}~` })] : p.label;
+    const cells = arrs.map((arr) => {
+      const mult = arr[e] / arr[s];
+      return el('td', {}, [pctSigned1.format(cagr(mult, e - s)), el('span', { class: 'tiny', text: fmtCum(mult) })]);
+    });
+    const tr = el('tr', {}, [el('td', {}, label), ...cells]);
+    tr.classList.toggle('is-selected', p.key === state.period);
+    rows.push(tr);
+  }
+  $('tableBody').replaceChildren(...rows);
+}
+
+function buildControls() {
+  $('periods').replaceChildren(...PERIODS.map((p) => {
+    const btn = el('button', { type: 'button', text: p.label, 'data-key': p.key, 'aria-pressed': 'false' });
+    if (startIndex(p.key) == null) btn.disabled = true;
+    btn.addEventListener('click', () => {
+      state.period = p.key;
+      // 20년 이상은 로그 눈금이 보기 좋음 (체크박스로 바꿀 수 있음)
+      state.log = p.key === 'all' || Number(p.key) >= 20;
+      render();
+    });
+    return btn;
+  }));
+  $('logScale').addEventListener('change', (e) => { state.log = e.target.checked; render(); });
+
+  for (const ul of document.querySelectorAll('[data-legend]')) {
+    ul.replaceChildren(...Object.values(SER).map((s) => el('li', {}, [el('span', { class: 'lkey', style: `background:${s.color}` }), s.name])));
+  }
+}
+
+// 창 크기가 바뀌면 그래프만 다시 그림
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { if (D) render(); }, 150);
+});
+
+
+/* ================= 시작 ================= */
+
+async function start() {
+  try {
+    const res = await fetch('history.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const h = await res.json();
+    if (!isValidHistory(h)) throw new Error('형식이 다름');
+    D = derive(h);
+  } catch {
+    $('loading').textContent = '데이터를 불러오지 못했어요. 잠시 뒤 새로고침해 주세요.';
+    return;
+  }
+  if (D.updated) $('dataNote').textContent = `데이터 갱신 ${fmtTime(D.updated)}`;
+  $('loading').hidden = true;
+  $('content').hidden = false;
+  buildControls();
+  render();
+}
+
+start();
+</script>
+</body>
+</html>

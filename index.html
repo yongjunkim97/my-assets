@@ -64,7 +64,12 @@
     color: var(--text-1);
     font: 15px/1.5 system-ui, -apple-system, "Segoe UI", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
   }
-  .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 48px; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 16px 16px 48px; }
+  /* 페이지 이동 */
+  .nav { display: flex; gap: 4px; margin-bottom: 16px; font-size: 14px; }
+  .nav a { padding: 6px 12px; border-radius: 999px; border: 1px solid transparent; color: var(--text-2); text-decoration: none; }
+  .nav a:hover { color: var(--text-1); }
+  .nav a[aria-current="page"] { color: var(--text-1); background: var(--surface); border-color: var(--border); font-weight: 600; }
   h1 { font-size: 22px; font-weight: 650; margin: 0; }
   h2 { font-size: 16px; font-weight: 600; margin: 0; }
   p { margin: 0; }
@@ -274,6 +279,10 @@
 </head>
 <body>
 <main class="wrap">
+  <nav class="nav" aria-label="페이지">
+    <a href="./" aria-current="page">내 자산</a>
+    <a href="history.html">지수 역사</a>
+  </nav>
   <header class="top">
     <h1>내 자산 현황</h1>
     <p class="sub" id="updated"></p>
