@@ -1,0 +1,6 @@
+# 자동으로 가격을 받을 종목 (한 줄에 하나, 미국 상장 티커)
+VOO   # Vanguard S&P 500
+SPY   # SPDR S&P 500
+IVV   # iShares S&P 500
+QQQ   # Invesco QQQ
+QQQM  # Invesco NASDAQ 100

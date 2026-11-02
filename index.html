@@ -71,8 +71,10 @@
   [hidden] { display: none !important; }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-  .top { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 16px; }
+  .top { display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 4px 12px; margin-bottom: 8px; }
   .sub { font-size: 13px; color: var(--text-2); }
+  .tiny { font-size: 11px; color: var(--text-2); }
+  .autobar { display: flex; align-items: center; flex-wrap: wrap; gap: 0 6px; margin-bottom: 16px; font-size: 13px; color: var(--text-2); }
   .card {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -263,6 +265,8 @@
     background: var(--page);
     color: var(--text-1);
   }
+  dialog input:disabled { opacity: 0.6; }
+  dialog .hint { margin: -6px 0 12px; }
   .error { min-height: 1.4em; margin-bottom: 8px; font-size: 13px; color: var(--up); }
   .actions { display: flex; align-items: center; gap: 8px; }
   .spacer { flex: 1; }
@@ -274,6 +278,10 @@
     <h1>내 자산 현황</h1>
     <p class="sub" id="updated"></p>
   </header>
+  <div class="autobar">
+    <span id="autoText"></span>
+    <button type="button" class="link" id="autoToggle"></button>
+  </div>
 
   <p class="notice" id="exampleNotice" hidden>
     ‘예시’ 표시가 붙은 종목의 수량과 평단은 예시예요. 각 종목의 ‘수정’을 눌러 토스 앱 ‘내 투자’에 나온 값으로 바꿔 주세요.
@@ -323,7 +331,7 @@
       <h2 id="holdingsTitle">보유 종목</h2>
       <button type="button" id="addBtn">+ 종목 추가</button>
     </div>
-    <p class="hint">현재가는 자동으로 바뀌지 않아요. 토스 앱에서 보고 ‘수정’으로 고쳐 주세요.</p>
+    <p class="hint" id="holdingsHint"></p>
     <div id="holdings"></div>
   </section>
 
@@ -341,7 +349,8 @@
   </section>
 
   <footer>
-    입력한 값은 어디로도 전송되지 않아요. 이 페이지는 외부 스크립트나 시세 API를 쓰지 않아요.
+    입력한 값은 어디로도 전송되지 않아요. 이 페이지가 받아오는 건 같은 사이트에 있는 시세 파일(prices.json)뿐이에요.
+    시세: Yahoo Finance(평일 아침 미국 장 마감 가격), 환율: ECB 기준환율(frankfurter.dev). 토스 앱의 가격·환율과 조금 다를 수 있어요.
   </footer>
 </main>
 
@@ -356,6 +365,7 @@
     <label>수량 (주, 소수점 가능) <input name="qty" type="number" step="any" min="0" inputmode="decimal"></label>
     <label>평균 매수가 ($) <input name="avg" type="number" step="any" min="0" inputmode="decimal"></label>
     <label>현재가 ($) <input name="price" type="number" step="any" min="0" inputmode="decimal"></label>
+    <p class="hint" id="priceHint" hidden>자동 갱신 종목이라 현재가는 자동으로 들어가요. 직접 넣으려면 맨 위의 자동 갱신을 꺼 주세요.</p>
     <p class="error" id="holdingError" role="alert"></p>
     <div class="actions">
       <button type="button" class="danger" id="deleteBtn">삭제</button>
@@ -423,20 +433,24 @@ function isValidData(d) {
 
 // 필요한 칸만 골라 깨끗한 형태로 만듦
 function clean(d) {
-  return {
+  const out = {
     version: 1,
+    autoUpdate: d.autoUpdate !== false,   // 자동 갱신 (처음엔 켜짐)
     fx: d.fx,
     updated: typeof d.updated === 'string' ? d.updated : today(),
     holdings: d.holdings.map((h) => {
-      const out = {
+      const o = {
         ticker: h.ticker.trim().toUpperCase(),
         name: typeof h.name === 'string' ? h.name.trim() : '',
         qty: h.qty, avg: h.avg, price: h.price,
       };
-      if (h.example === true) out.example = true;
-      return out;
+      if (typeof h.priceTime === 'string') o.priceTime = h.priceTime;   // 자동으로 받은 가격의 시각
+      if (h.example === true) o.example = true;
+      return o;
     }),
   };
+  if (typeof d.fxDate === 'string') out.fxDate = d.fxDate;              // 자동으로 받은 환율의 날짜
+  return out;
 }
 
 function load() {
@@ -463,6 +477,87 @@ function today() {
   const d = new Date();
   const pad = (n) => String(n).padStart(2, '0');
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+
+/* ================= 1-2. 자동 시세 (prices.json) ================= */
+// GitHub Actions가 평일 아침마다 prices.json에 최신 가격과 환율을 넣어둔다.
+// 페이지를 열 때 그 파일을 읽어서, 자동 갱신이 켜져 있으면 현재가와 환율을 바꾼다.
+
+let auto = null;              // 읽어온 prices.json (정리된 형태)
+let autoStatus = 'loading';   // 'loading' | 'ok' | 'error'
+
+// 파일 내용 중 쓸 수 있는 값만 골라냄
+function sanitizeAuto(j) {
+  if (!j || typeof j !== 'object' || !j.prices || typeof j.prices !== 'object') return null;
+  const prices = {};
+  for (const [t, p] of Object.entries(j.prices)) {
+    if (p && Number.isFinite(p.price) && p.price > 0 && typeof p.time === 'string' && !Number.isNaN(Date.parse(p.time))) {
+      prices[t.toUpperCase()] = { price: p.price, time: p.time };
+    }
+  }
+  const f = j.fx;
+  const fx = f && Number.isFinite(f.rate) && f.rate >= 100 && f.rate <= 10000 && typeof f.date === 'string'
+    ? { rate: f.rate, date: f.date } : null;
+  return { updated: typeof j.updated === 'string' ? j.updated : null, prices, fx };
+}
+
+// 자동 값이 있는 종목이면 그 가격을, 아니면 null
+function autoPriceFor(ticker) {
+  return data.autoUpdate && auto && auto.prices[ticker] ? auto.prices[ticker] : null;
+}
+function autoFx() {
+  return data.autoUpdate && auto && auto.fx ? auto.fx : null;
+}
+
+// 자동 값을 내 데이터에 반영. 바뀐 게 있으면 true
+function applyAuto() {
+  let changed = false;
+  for (const h of data.holdings) {
+    const p = autoPriceFor(h.ticker);
+    if (p && (h.price !== p.price || h.priceTime !== p.time)) {
+      h.price = p.price;
+      h.priceTime = p.time;
+      changed = true;
+    }
+  }
+  const fx = autoFx();
+  if (fx && (data.fx !== fx.rate || data.fxDate !== fx.date)) {
+    data.fx = fx.rate;
+    data.fxDate = fx.date;
+    changed = true;
+  }
+  return changed;
+}
+
+async function loadAuto() {
+  autoStatus = 'loading';
+  render();
+  try {
+    const res = await fetch('prices.json', { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    auto = sanitizeAuto(await res.json());
+    if (!auto) throw new Error('형식이 다름');
+    autoStatus = 'ok';
+    if (applyAuto()) writeStore(data);
+  } catch {
+    autoStatus = 'error';
+  }
+  render();
+}
+
+// '11/3 06:00' 처럼 한국 시간으로
+const kstParts = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Seoul', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
+});
+function fmtTime(iso) {
+  const p = Object.fromEntries(kstParts.formatToParts(new Date(iso)).map((x) => [x.type, x.value]));
+  return `${p.month}/${p.day} ${p.hour}:${p.minute}`;
+}
+// '2026-11-02' → '11/2'
+function fmtDate(s) {
+  const [, m, d] = s.split('-');
+  return `${Number(m)}/${Number(d)}`;
 }
 
 
@@ -541,7 +636,10 @@ function render() {
 
   $('totalKrw').textContent = krw.format(s.totalValue * fx);
   $('totalUsd').textContent = usd.format(s.totalValue);
-  $('fxText').textContent = '₩' + fxFmt.format(fx);
+  $('fxText').textContent = '₩' + fxFmt.format(fx) + (data.fxDate ? ` (${fmtDate(data.fxDate)} 기준)` : '');
+  $('fxEditBtn').hidden = !!autoFx();   // 자동 환율을 쓰는 동안은 직접 수정 버튼을 숨김
+
+  renderAutoBar();
 
   setDelta($('pnlUsd'), s.totalPnl, usdSigned.format(s.totalPnl), true);
   setDelta($('pnlKrw'), s.totalPnl, krwSigned.format(s.totalPnl * fx), false);
@@ -552,6 +650,32 @@ function render() {
   renderWeights(s);
   renderHoldings(s);
 }
+
+// 맨 위 '자동 갱신' 줄과 보유 종목 안내 문구
+function renderAutoBar() {
+  let text;
+  if (!data.autoUpdate) text = '시세 자동 갱신 꺼짐 · 현재가와 환율을 직접 고쳐요';
+  else if (autoStatus === 'loading') text = '시세를 불러오는 중…';
+  else if (autoStatus === 'error') text = '자동 시세를 불러오지 못했어요. 마지막으로 저장된 값을 보여주고 있어요.';
+  else text = '시세 자동 갱신 중' + (auto.updated ? ` · 마지막 갱신 ${fmtTime(auto.updated)}` : '');
+  $('autoText').textContent = text;
+  $('autoToggle').textContent = data.autoUpdate ? '끄기' : '켜기';
+
+  const autoTickers = data.autoUpdate && auto ? Object.keys(auto.prices) : [];
+  $('holdingsHint').textContent = autoTickers.length
+    ? `현재가가 자동으로 바뀌는 종목: ${autoTickers.join(', ')}. 다른 종목은 ‘수정’에서 직접 고쳐 주세요.`
+    : '현재가는 자동으로 바뀌지 않아요. 토스 앱에서 보고 ‘수정’으로 고쳐 주세요.';
+}
+
+$('autoToggle').addEventListener('click', () => {
+  data.autoUpdate = !data.autoUpdate;
+  if (data.autoUpdate) {
+    if (auto) applyAuto();
+    else loadAuto();   // 아직 못 불러왔으면 다시 시도
+  }
+  writeStore(data);
+  render();
+});
 
 // i번째 종목의 색. 색은 '목록 순서'를 따름(금액 순위가 아님)
 function colorOf(i) { return i < SERIES ? `var(--s${i + 1})` : 'var(--other)'; }
@@ -628,7 +752,10 @@ function renderHoldings(s) {
     const pctLine = el('div', { class: 'sub' });
     setDelta(pctLine, r.pnl, r.pnlPct == null ? '–' : pctSigned.format(r.pnlPct), false);
 
-    const meta = (dt, dd) => el('div', {}, [el('dt', { text: dt }), el('dd', { text: dd })]);
+    const meta = (dt, dd, note) => el('div', {}, [
+      el('dt', { text: dt }),
+      el('dd', {}, [dd, note ? el('div', { class: 'tiny', text: note }) : null]),
+    ]);
 
     list.append(el('article', { class: 'holding' }, [
       el('div', { class: 'h-top' }, [
@@ -649,7 +776,7 @@ function renderHoldings(s) {
       el('dl', { class: 'h-meta' }, [
         meta('수량', qtyFmt.format(r.qty) + '주'),
         meta('평균 매수가', usd.format(r.avg)),
-        meta('현재가', usd.format(r.price)),
+        meta('현재가', usd.format(r.price), r.priceTime ? `${fmtTime(r.priceTime)} 기준` : '직접 입력'),
         meta('비중', pct1.format(r.weight)),
       ]),
     ]));
@@ -701,11 +828,22 @@ function openHolding(i) {
   f.qty.value = h.qty;
   f.avg.value = h.avg;
   f.price.value = h.price;
+  updatePriceLock();
   $('deleteBtn').hidden = i < 0;
   $('holdingError').textContent = '';
   holdingDialog.showModal();
 }
 
+// 자동 갱신 종목이면 현재가 칸을 자동 값으로 채우고 잠금
+function updatePriceLock() {
+  const f = holdingForm.elements;
+  const p = autoPriceFor(f.ticker.value.trim().toUpperCase());
+  if (p) f.price.value = p.price;
+  f.price.disabled = !!p;
+  $('priceHint').hidden = !p;
+}
+
+holdingForm.elements.ticker.addEventListener('input', updatePriceLock);
 $('addBtn').addEventListener('click', () => openHolding(-1));
 $('holdingCancel').addEventListener('click', () => holdingDialog.close());
 
@@ -716,7 +854,8 @@ holdingForm.addEventListener('submit', (e) => {
   const name = f.fullname.value.trim();
   const qty = Number(f.qty.value);
   const avg = Number(f.avg.value);
-  const price = Number(f.price.value);
+  const autoP = autoPriceFor(ticker);
+  const price = autoP ? autoP.price : Number(f.price.value);
 
   let err = '';
   if (!ticker) err = '티커를 넣어 주세요.';
@@ -727,6 +866,10 @@ holdingForm.addEventListener('submit', (e) => {
   if (err) { $('holdingError').textContent = err; return; }
 
   const h = { ticker, name, qty, avg, price };   // 저장하면 '예시' 표시는 사라짐
+  // 가격 시각: 자동 값이면 그 시각, 예전 자동 가격을 그대로 두었으면 예전 시각, 직접 고쳤으면 없음
+  const before = editingIndex >= 0 ? data.holdings[editingIndex] : null;
+  if (autoP) h.priceTime = autoP.time;
+  else if (before && before.ticker === ticker && before.price === price && before.priceTime) h.priceTime = before.priceTime;
   if (editingIndex >= 0) data.holdings[editingIndex] = h;
   else data.holdings.push(h);
   holdingDialog.close();
@@ -763,6 +906,7 @@ fxForm.addEventListener('submit', (e) => {
     return;
   }
   data.fx = fx;
+  delete data.fxDate;   // 직접 넣은 환율이라 날짜 표시는 뺌
   fxDialog.close();
   commit();
 });
@@ -802,7 +946,8 @@ $('importInput').addEventListener('change', async (e) => {
 
 
 /* ================= 시작 ================= */
-render();
+// 저장된 값으로 먼저 그리고, 자동 시세를 받아오면 다시 그림
+loadAuto();
 </script>
 </body>
 </html>
